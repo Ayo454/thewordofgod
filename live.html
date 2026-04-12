@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Live - The Word of God Apostolic Deliverance Vineyard Church</title>
+    <script src="https://player.twitch.tv/js/embed/v1.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            min-height: 100%;
+            background: #000;
+            color: #fff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #twitch-embed {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            z-index: 10;
+        }
+
+        .header-logo {
+            height: 44px;
+            width: auto;
+            display: block;
+        }
+
+        .home-button {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: #fff;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .home-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .stream-error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 500px;
+            z-index: 5;
+            display: none;
+        }
+
+        .stream-error h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .stream-error p {
+            color: #ccc;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .stream-error a {
+            display: inline-block;
+            background: #3366cc;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .stream-error a:hover {
+            background: #2952a3;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="logo.jpg" alt="Apostolic Vineyard Church logo" class="header-logo">
+        <button class="home-button" onclick="window.location.href='index.html'">Home</button>
+    </div>
+    <div id="twitch-embed"></div>
+    <div id="stream-error" class="stream-error">
+        <h2>Stream Unavailable</h2>
+        <p>The live stream is currently unavailable. Please try again later or contact us for more information.</p>
+        <a href="index.html">Return to Home</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const parent = window.location.hostname || 'localhost';
+            
+            try {
+                new Twitch.Embed("twitch-embed", {
+                    width: "100%",
+                    height: "100%",
+                    channel: "vineyard3463",
+                    layout: "video",
+                    parent: [parent, "localhost", "127.0.0.1"]
+                });
+            } catch (error) {
+                console.error('Twitch embed error:', error);
+                showStreamError();
+            }
+
+            // Show error if stream doesn't load after 10 seconds
+            setTimeout(function() {
+                const iframe = document.querySelector('iframe');
+                if (!iframe) {
+                    showStreamError();
+                }
+            }, 10000);
+        });
+
+        function showStreamError() {
+            const errorDiv = document.getElementById('stream-error');
+            const twitchEmbed = document.getElementById('twitch-embed');
+            if (errorDiv && twitchEmbed) {
+                errorDiv.style.display = 'block';
+                twitchEmbed.style.display = 'none';
+            }
+        }
+
+        window.addEventListener('error', function(e) {
+            if (e.message.includes('Twitch') || e.message.includes('twitch')) {
+                showStreamError();
+            }
+        });
+    </script>
+</body>
+</html>
+
