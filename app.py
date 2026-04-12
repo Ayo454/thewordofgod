@@ -244,7 +244,7 @@ Reply to: {email}
       <!-- Header with Logo and Church Name -->
       <tr>
         <td style="padding: 24px; text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);">
-          <img src="http://127.0.0.1:5000/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
+          <img src="https://god-word.onrender.com/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
           <h1 style="margin: 0 0 4px; color: #ffffff; font-size: 24px; font-weight: bold;">The Word of God Deliverance</h1>
           <p style="margin: 0; color: #e0e7ff; font-size: 14px;">Vineyard Church</p>
         </td>
@@ -304,7 +304,7 @@ Reply to: {email}
       <!-- Header with Logo and Church Name -->
       <tr>
         <td style="padding: 24px; text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);">
-          <img src="http://127.0.0.1:5000/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
+          <img src="https://god-word.onrender.com/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
           <h1 style="margin: 0 0 4px; color: #ffffff; font-size: 24px; font-weight: bold;">The Word of God Deliverance</h1>
           <p style="margin: 0; color: #e0e7ff; font-size: 14px;">Vineyard Church</p>
         </td>
