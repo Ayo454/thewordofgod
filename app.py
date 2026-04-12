@@ -182,6 +182,19 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
 
+# Custom error handlers for API endpoints
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({'success': False, 'error': 'Endpoint not found'}), 404
+
+@app.errorhandler(400)
+def bad_request_error(error):
+    return jsonify({'success': False, 'error': 'Bad request'}), 400
+
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory('.', filename)
@@ -192,8 +205,12 @@ def send_contact():
         return jsonify({'status': 'ok'})
     
     try:
+        print("=== CONTACT FORM REQUEST RECEIVED ===")
         data = request.get_json()
+        print(f"Request data: {data}")
+        
         if not data:
+            print("No data provided")
             return jsonify({'success': False, 'error': 'No data provided'}), 400
             
         name = data.get('name', '').strip()
@@ -202,9 +219,14 @@ def send_contact():
         message = data.get('message', '').strip()
         to_email = data.get('to_email', '').strip()  # New field for custom recipient
         
+        print(f"Parsed data - Name: {name}, Email: {email}, Phone: {phone}, Message length: {len(message)}")
+        
         # Validate required fields
         if not name or not email or not phone or not message:
+            print("Validation failed - missing required fields")
             return jsonify({'success': False, 'error': 'All fields are required'}), 400
+        
+        print("Validation passed, preparing to send email...")
         
         # Determine recipient based on form type
         if to_email:
@@ -216,6 +238,8 @@ def send_contact():
             recipient = GMAIL_ADDRESS
             subject = f'New Contact Message from {name}'
         
+        print(f"Sending email to: {recipient}")
+        
         # Create email message
         msg = MIMEMultipart('alternative')
         msg['From'] = 'The Word of God Deliverance Vineyard Church <' + GMAIL_ADDRESS + '>'
@@ -224,132 +248,28 @@ def send_contact():
         if not to_email:
             msg['Reply-To'] = email
         
-        if to_email:
-            # Media panel message
-            plain_body = f"""
+        # Use simple text email for now to avoid HTML issues
+        plain_body = f"""
 The Word of God Deliverance Vineyard Church
-Message from Media Panel:
 
-Name: {name}
-Phone: {phone}
-
-Message:
-{message}
-
-Reply to: {email}
-"""
-
-            html_body = f"""
-<html>
-  <body style="font-family: Arial, sans-serif; color: #333; background: #f7f7f7; margin: 0; padding: 0;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); overflow: hidden;">
-      <!-- Header with Logo and Church Name -->
-      <tr>
-        <td style="padding: 24px; text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);">
-          <img src="https://god-word.onrender.com/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
-          <h1 style="margin: 0 0 4px; color: #ffffff; font-size: 24px; font-weight: bold;">The Word of God Deliverance</h1>
-          <p style="margin: 0; color: #e0e7ff; font-size: 14px;">Vineyard Church</p>
-        </td>
-      </tr>
-      <!-- Content -->
-      <tr>
-        <td style="padding: 24px;">
-          <h2 style="margin: 0 0 12px; color: #1d4ed8;">New Message Received</h2>
-          <p style="margin: 0 0 20px; color: #555; font-size: 14px;">A message has been sent from the media panel contact form.</p>
-          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
-            <tr>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #1d4ed8; width: 130px;">Name</td>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; color: #333;">{name}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #1d4ed8;">Phone</td>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><a href="tel:{phone}" style="color: #2563eb; text-decoration: none;">{phone}</a></td>
-            </tr>
-            <tr>
-              <td style="padding: 12px 0; font-weight: bold; color: #1d4ed8; vertical-align: top;">Message</td>
-              <td style="padding: 12px 0; white-space: pre-wrap; color: #444; line-height: 1.6;">{message}</td>
-            </tr>
-          </table>
-          <p style="margin: 16px 0 0; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;"><strong>From:</strong> {email}</p>
-        </td>
-      </tr>
-      <!-- Footer -->
-      <tr>
-        <td style="padding: 20px 24px; background: #f3f4f6; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="margin: 0; color: #6b7280; font-size: 12px;">© 2026 The Word of God Deliverance Vineyard Church. All rights reserved.</p>
-          <p style="margin: 8px 0 0; color: #9ca3af; font-size: 11px;">This is an automated message from our contact management system.</p>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-"""
-        else:
-            # Original contact form message
-            plain_body = f"""
-The Word of God Deliverance Vineyard Church
 New Contact Message:
 
 Name: {name}
+Email: {email}
 Phone: {phone}
 
 Message:
 {message}
 
-Reply to: {email}
-"""
-
-            html_body = f"""
-<html>
-  <body style="font-family: Arial, sans-serif; color: #333; background: #f7f7f7; margin: 0; padding: 0;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); overflow: hidden;">
-      <!-- Header with Logo and Church Name -->
-      <tr>
-        <td style="padding: 24px; text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);">
-          <img src="https://god-word.onrender.com/logo.jpg" alt="The Word of God Deliverance Vineyard Church" style="max-width: 80px; height: auto; margin-bottom: 16px; border-radius: 8px;">
-          <h1 style="margin: 0 0 4px; color: #ffffff; font-size: 24px; font-weight: bold;">The Word of God Deliverance</h1>
-          <p style="margin: 0; color: #e0e7ff; font-size: 14px;">Vineyard Church</p>
-        </td>
-      </tr>
-      <!-- Content -->
-      <tr>
-        <td style="padding: 24px;">
-          <h2 style="margin: 0 0 12px; color: #1d4ed8;">New Contact Message</h2>
-          <p style="margin: 0 0 20px; color: #555; font-size: 14px;">A new message has been submitted through the contact form.</p>
-          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
-            <tr>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #1d4ed8; width: 130px;">Name</td>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; color: #333;">{name}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #1d4ed8;">Phone</td>
-              <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><a href="tel:{phone}" style="color: #2563eb; text-decoration: none;">{phone}</a></td>
-            </tr>
-            <tr>
-              <td style="padding: 12px 0; font-weight: bold; color: #1d4ed8; vertical-align: top;">Message</td>
-              <td style="padding: 12px 0; white-space: pre-wrap; color: #444; line-height: 1.6;">{message}</td>
-            </tr>
-          </table>
-          <p style="margin: 16px 0 0; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;"><strong>From:</strong> {email}</p>
-        </td>
-      </tr>
-      <!-- Footer -->
-      <tr>
-        <td style="padding: 20px 24px; background: #f3f4f6; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="margin: 0; color: #6b7280; font-size: 12px;">© 2026 The Word of God Deliverance Vineyard Church. All rights reserved.</p>
-          <p style="margin: 8px 0 0; color: #9ca3af; font-size: 11px;">This is an automated message from our contact management system.</p>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
+---
+This message was sent from the church website contact form.
 """
 
         msg.attach(MIMEText(plain_body, 'plain'))
-        msg.attach(MIMEText(html_body, 'html'))
         
         # Send email
         try:
+            print("Connecting to Gmail SMTP...")
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
                 server.send_message(msg)
@@ -358,7 +278,7 @@ Reply to: {email}
             
         except smtplib.SMTPAuthenticationError as auth_err:
             error_msg = 'Gmail authentication failed. Check credentials and ensure 2FA is disabled or an App Password is used.'
-            print(f'✗ {error_msg}')
+            print(f'✗ {error_msg}: {str(auth_err)}')
             return jsonify({'success': False, 'error': error_msg}), 500
             
         except smtplib.SMTPException as smtp_err:
@@ -377,5 +297,8 @@ if __name__ == '__main__':
     # For local development
     app.run(host='0.0.0.0', port=5000, debug=True)
 
-    # For production deployment with gunicorn, use:
-    # gunicorn app:app -b 0.0.0.0:$PORT
+# For production deployment with gunicorn
+# This ensures proper error handling in production
+if __name__ != '__main__':
+    # Production mode - disable debug
+    app.debug = False

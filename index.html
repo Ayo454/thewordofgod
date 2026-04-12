@@ -215,9 +215,14 @@
                             body: JSON.stringify(data)
                         });
 
-                        const result = await response.json();
+                        let result;
+                        try {
+                            result = await response.json();
+                        } catch (e) {
+                            result = { success: false, error: 'Server returned an invalid response. Please try again later.' };
+                        }
 
-                        if (result.success) {
+                        if (response.ok && result.success) {
                             formMessage.classList.remove('form-message--error');
                             formMessage.classList.add('form-message--success');
                             formMessage.textContent = 'Message sent successfully! Thank you for reaching out.';
