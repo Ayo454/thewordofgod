@@ -6,14 +6,15 @@ from flask_cors import CORS
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import sys
 
 app = Flask(__name__, static_folder='')
 
 CORS(app)
 
-# Email configuration
-GMAIL_ADDRESS = 'churchthewordofgoddeliverance@gmail.com'
-GMAIL_PASSWORD = 'iqicottabtvmxlix'  # Removed spaces from the original password
+# Email configuration - use environment variables with fallbacks
+GMAIL_ADDRESS = os.getenv('GMAIL_ADDRESS', 'churchthewordofgoddeliverance@gmail.com')
+GMAIL_PASSWORD = os.getenv('GMAIL_PASSWORD', 'iqicottabtvmxlix')
 
 LIVE_STATE_FILE = 'live_state.json'
 SIGNALING_FILE = 'signaling_data.json'
@@ -205,40 +206,38 @@ def send_contact():
         return jsonify({'status': 'ok'})
     
     try:
-        print("=== CONTACT FORM REQUEST RECEIVED ===")
+        print("=== CONTACT FORM REQUEST RECEIVED ===", file=sys.stderr)
         data = request.get_json()
-        print(f"Request data: {data}")
+        print(f"Request data: {data}", file=sys.stderr)
         
         if not data:
-            print("No data provided")
+            print("No data provided", file=sys.stderr)
             return jsonify({'success': False, 'error': 'No data provided'}), 400
             
         name = data.get('name', '').strip()
         email = data.get('email', '').strip()
         phone = data.get('phone', '').strip()
         message = data.get('message', '').strip()
-        to_email = data.get('to_email', '').strip()  # New field for custom recipient
+        to_email = data.get('to_email', '').strip()
         
-        print(f"Parsed data - Name: {name}, Email: {email}, Phone: {phone}, Message length: {len(message)}")
+        print(f"Parsed data - Name: {name}, Email: {email}, Phone: {phone}, Message length: {len(message)}", file=sys.stderr)
         
         # Validate required fields
         if not name or not email or not phone or not message:
-            print("Validation failed - missing required fields")
+            print("Validation failed - missing required fields", file=sys.stderr)
             return jsonify({'success': False, 'error': 'All fields are required'}), 400
         
-        print("Validation passed, preparing to send email...")
+        print("Validation passed, preparing to send email...", file=sys.stderr)
         
         # Determine recipient based on form type
         if to_email:
-            # Media panel form
             recipient = to_email
             subject = f'Message from {name} via Media Panel'
         else:
-            # Main contact form - send to church email
             recipient = GMAIL_ADDRESS
             subject = f'New Contact Message from {name}'
         
-        print(f"Sending email to: {recipient}")
+        print(f"Sending email to: {recipient}", file=sys.stderr)
         
         # Create email message
         msg = MIMEMultipart('alternative')
@@ -248,7 +247,7 @@ def send_contact():
         if not to_email:
             msg['Reply-To'] = email
         
-        # Use simple text email for now to avoid HTML issues
+        # Use simple text email
         plain_body = f"""
 The Word of God Deliverance Vineyard Church
 
@@ -269,28 +268,40 @@ This message was sent from the church website contact form.
         
         # Send email
         try:
-            print("Connecting to Gmail SMTP...")
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            print("Attempting to connect to Gmail SMTP...", file=sys.stderr)
+            print(f"Gmail address: {GMAIL_ADDRESS}", file=sys.stderr)
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10) as server:
+                print("Connected to SMTP server", file=sys.stderr)
                 server.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
+                print("Authentication successful", file=sys.stderr)
                 server.send_message(msg)
-            print(f'✓ Email sent successfully to {recipient}')
+                print(f"Email sent successfully to {recipient}", file=sys.stderr)
+            
             return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
             
         except smtplib.SMTPAuthenticationError as auth_err:
-            error_msg = 'Gmail authentication failed. Check credentials and ensure 2FA is disabled or an App Password is used.'
-            print(f'✗ {error_msg}: {str(auth_err)}')
+            error_msg = 'Gmail authentication failed. Please check the email credentials configured on the server.'
+            print(f'SMTP Auth Error: {str(auth_err)}', file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
             
         except smtplib.SMTPException as smtp_err:
-            error_msg = f'Email service error: {str(smtp_err)}'
-            print(f'✗ {error_msg}')
+            error_msg = f'Email service error. Please try again later.'
+            print(f'SMTP Error: {str(smtp_err)}', file=sys.stderr)
+            return jsonify({'success': False, 'error': error_msg}), 500
+            
+        except Exception as e:
+            import traceback
+            error_msg = f'Failed to send email. Please try again later.'
+            print(f'Unexpected error in email send: {str(e)}', file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
     
     except Exception as e:
         import traceback
-        error_msg = f'Error processing request: {str(e)}'
-        print(f'✗ {error_msg}')
-        traceback.print_exc()
+        error_msg = f'Error processing request'
+        print(f'Unexpected error: {str(e)}', file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'success': False, 'error': error_msg}), 500
 
 if __name__ == '__main__':
