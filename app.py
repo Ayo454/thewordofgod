@@ -3,18 +3,18 @@ import time
 import json
 import os
 from flask_cors import CORS
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 import sys
 
 app = Flask(__name__, static_folder='')
 
 CORS(app)
 
-# Email configuration - use environment variables with fallbacks
-GMAIL_ADDRESS = os.getenv('GMAIL_ADDRESS', 'churchthewordofgoddeliverance@gmail.com')
-GMAIL_PASSWORD = os.getenv('GMAIL_PASSWORD', 'iqicottabtvmxlix')
+# Email configuration
+SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
+FROM_EMAIL = os.getenv('FROM_EMAIL', 'noreply@thewordofgodchurch.com')
+TO_EMAIL = os.getenv('TO_EMAIL', 'churchthewordofgoddeliverance@gmail.com')
 
 LIVE_STATE_FILE = 'live_state.json'
 SIGNALING_FILE = 'signaling_data.json'
@@ -234,20 +234,12 @@ def send_contact():
             recipient = to_email
             subject = f'Message from {name} via Media Panel'
         else:
-            recipient = GMAIL_ADDRESS
+            recipient = TO_EMAIL
             subject = f'New Contact Message from {name}'
         
         print(f"Sending email to: {recipient}", file=sys.stderr)
         
-        # Create email message
-        msg = MIMEMultipart('alternative')
-        msg['From'] = 'The Word of God Deliverance Vineyard Church <' + GMAIL_ADDRESS + '>'
-        msg['To'] = recipient
-        msg['Subject'] = subject
-        if not to_email:
-            msg['Reply-To'] = email
-        
-        # Use simple text email
+        # Create email body
         plain_body = f"""
 The Word of God Deliverance Vineyard Church
 
@@ -263,36 +255,101 @@ Message:
 ---
 This message was sent from the church website contact form.
 """
-
-        msg.attach(MIMEText(plain_body, 'plain'))
         
-        # Send email
+        html_body = f"""
+<html>
+  <body>
+    <h2>The Word of God Deliverance Vineyard Church</h2>
+    <h3>New Contact Message</h3>
+    <p><strong>Name:</strong> {name}</p>
+    <p><strong>Email:</strong> {email}</p>
+    <p><strong>Phone:</strong> {phone}</p>
+    <h3>Message:</h3>
+    <p>{message}</p>
+    <hr>
+    <p>This message was sent from the church website contact form.</p>
+  </body>
+</html>
+"""
+        
+        # Send email via configured provider
         try:
-            print("Attempting to connect to Gmail SMTP...", file=sys.stderr)
-            print(f"Gmail address: {GMAIL_ADDRESS}", file=sys.stderr)
-            
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10) as server:
-                print("Connected to SMTP server", file=sys.stderr)
-                server.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
-                print("Authentication successful", file=sys.stderr)
-                server.send_message(msg)
-                print(f"Email sent successfully to {recipient}", file=sys.stderr)
-            
-            return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
-            
-        except smtplib.SMTPAuthenticationError as auth_err:
-            error_msg = 'Gmail authentication failed. Please check the email credentials configured on the server.'
-            print(f'SMTP Auth Error: {str(auth_err)}', file=sys.stderr)
+            if SENDGRID_API_KEY:
+                print("Preparing SendGrid request...", file=sys.stderr)
+                sendgrid_url = 'https://api.sendgrid.com/v3/mail/send'
+                headers = {
+                    'Authorization': f'Bearer {SENDGRID_API_KEY}',
+                    'Content-Type': 'application/json'
+                }
+                payload = {
+                    'personalizations': [
+                        {
+                            'to': [{'email': recipient}],
+                            'subject': subject
+                        }
+                    ],
+                    'from': {'email': FROM_EMAIL, 'name': 'The Word of God Church'},
+                    'content': [
+                        {'type': 'text/plain', 'value': plain_body},
+                        {'type': 'text/html', 'value': html_body}
+                    ]
+                }
+                if not to_email:
+                    payload['reply_to'] = {'email': email}
+                print(f"Sending to SendGrid: {recipient}", file=sys.stderr)
+                response = requests.post(sendgrid_url, json=payload, headers=headers, timeout=10)
+                
+                if response.status_code in [200, 201, 202]:
+                    print(f"Email sent successfully to {recipient}", file=sys.stderr)
+                    return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+                else:
+                    error_msg = 'Email service error. Please try again later.'
+                    print(f'SendGrid Error {response.status_code}: {response.text}', file=sys.stderr)
+                    return jsonify({'success': False, 'error': error_msg}), 500
+            elif BREVO_API_KEY:
+                print("Preparing Brevo request...", file=sys.stderr)
+                brevo_url = 'https://api.brevo.com/v3/smtp/email'
+                headers = {
+                    'api-key': BREVO_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+                payload = {
+                    'sender': {'name': 'The Word of God Church', 'email': FROM_EMAIL},
+                    'to': [{'email': recipient}],
+                    'subject': subject,
+                    'textContent': plain_body,
+                    'htmlContent': html_body
+                }
+                if not to_email:
+                    payload['replyTo'] = {'email': email}
+                print(f"Sending to Brevo: {recipient}", file=sys.stderr)
+                response = requests.post(brevo_url, json=payload, headers=headers, timeout=10)
+                
+                if 200 <= response.status_code < 300:
+                    print(f"Email sent successfully to {recipient}", file=sys.stderr)
+                    return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+                else:
+                    error_msg = 'Email service error. Please try again later.'
+                    print(f'Brevo Error {response.status_code}: {response.text}', file=sys.stderr)
+                    return jsonify({'success': False, 'error': error_msg}), 500
+            else:
+                error_msg = 'Email service not configured. Please contact the administrator.'
+                print('No email provider API key configured', file=sys.stderr)
+                return jsonify({'success': False, 'error': error_msg}), 500
+        
+        except requests.exceptions.Timeout:
+            error_msg = 'Email service timeout. Please try again later.'
+            print(f'Email provider timeout', file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
-            
-        except smtplib.SMTPException as smtp_err:
-            error_msg = f'Email service error. Please try again later.'
-            print(f'SMTP Error: {str(smtp_err)}', file=sys.stderr)
+        
+        except requests.exceptions.RequestException as req_err:
+            error_msg = 'Failed to send email. Please try again later.'
+            print(f'Request Error: {str(req_err)}', file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
             
         except Exception as e:
             import traceback
-            error_msg = f'Failed to send email. Please try again later.'
+            error_msg = 'Failed to send email. Please try again later.'
             print(f'Unexpected error in email send: {str(e)}', file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
