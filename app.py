@@ -18,6 +18,8 @@ TO_EMAIL = os.getenv('TO_EMAIL', 'churchthewordofgoddeliverance@gmail.com')
 
 LIVE_STATE_FILE = 'live_state.json'
 SIGNALING_FILE = 'signaling_data.json'
+CONTACT_MESSAGES_FILE = 'contact_messages.json'
+SAVE_CONTACTS_ON_FAILURE = os.getenv('SAVE_CONTACTS_ON_FAILURE', 'true').lower() in ('1', 'true', 'yes')
 
 def load_live_state():
     if os.path.exists(LIVE_STATE_FILE):
@@ -48,6 +50,21 @@ def load_signaling_data():
 def save_signaling_data(data):
     with open(SIGNALING_FILE, 'w') as f:
         json.dump(data, f)
+
+
+def save_contact_message(entry):
+    try:
+        messages = []
+        if os.path.exists(CONTACT_MESSAGES_FILE):
+            with open(CONTACT_MESSAGES_FILE, 'r', encoding='utf-8') as f:
+                messages = json.load(f)
+    except Exception:
+        messages = []
+
+    messages.append(entry)
+    with open(CONTACT_MESSAGES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(messages, f, indent=2)
+    print(f"Saved contact fallback to {CONTACT_MESSAGES_FILE}", file=sys.stderr)
 
 live_state = load_live_state()
 
@@ -271,7 +288,17 @@ This message was sent from the church website contact form.
   </body>
 </html>
 """
-        
+
+        contact_entry = {
+            'timestamp': int(time.time()),
+            'name': name,
+            'email': email,
+            'phone': phone,
+            'message': message,
+            'recipient': recipient,
+            'subject': subject
+        }
+
         # Send email via configured provider
         try:
             if SENDGRID_API_KEY:
@@ -303,7 +330,12 @@ This message was sent from the church website contact form.
                     print(f"Email sent successfully to {recipient}", file=sys.stderr)
                     return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
                 else:
-                    error_msg = 'Email service error. Please try again later.'
+                    if SAVE_CONTACTS_ON_FAILURE:
+                        save_contact_message(contact_entry)
+                    if response.status_code in [401, 403]:
+                        error_msg = 'Email service authentication failed. Please contact the administrator.'
+                    else:
+                        error_msg = 'Email service error. Please try again later.'
                     print(f'SendGrid Error {response.status_code}: {response.text}', file=sys.stderr)
                     return jsonify({'success': False, 'error': error_msg}), 500
             elif BREVO_API_KEY:
@@ -329,25 +361,38 @@ This message was sent from the church website contact form.
                     print(f"Email sent successfully to {recipient}", file=sys.stderr)
                     return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
                 else:
-                    error_msg = 'Email service error. Please try again later.'
+                    if SAVE_CONTACTS_ON_FAILURE:
+                        save_contact_message(contact_entry)
+                    if response.status_code in [401, 403]:
+                        error_msg = 'Email service authentication failed. Please contact the administrator.'
+                    else:
+                        error_msg = 'Email service error. Please try again later.'
                     print(f'Brevo Error {response.status_code}: {response.text}', file=sys.stderr)
                     return jsonify({'success': False, 'error': error_msg}), 500
             else:
-                error_msg = 'Email service not configured. Please contact the administrator.'
+                if SAVE_CONTACTS_ON_FAILURE:
+                    save_contact_message(contact_entry)
+                error_msg = 'Email service not configured. Your message has been stored and will be reviewed by the administrator.'
                 print('No email provider API key configured', file=sys.stderr)
-                return jsonify({'success': False, 'error': error_msg}), 500
+                return jsonify({'success': True, 'message': error_msg}), 200
         
         except requests.exceptions.Timeout:
+            if SAVE_CONTACTS_ON_FAILURE:
+                save_contact_message(contact_entry)
             error_msg = 'Email service timeout. Please try again later.'
             print(f'Email provider timeout', file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
         
         except requests.exceptions.RequestException as req_err:
+            if SAVE_CONTACTS_ON_FAILURE:
+                save_contact_message(contact_entry)
             error_msg = 'Failed to send email. Please try again later.'
             print(f'Request Error: {str(req_err)}', file=sys.stderr)
             return jsonify({'success': False, 'error': error_msg}), 500
             
         except Exception as e:
+            if SAVE_CONTACTS_ON_FAILURE:
+                save_contact_message(contact_entry)
             import traceback
             error_msg = 'Failed to send email. Please try again later.'
             print(f'Unexpected error in email send: {str(e)}', file=sys.stderr)
