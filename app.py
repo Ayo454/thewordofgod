@@ -193,24 +193,26 @@ def send_contact():
     
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
         name = data.get('name', '').strip()
         email = data.get('email', '').strip()
         phone = data.get('phone', '').strip()
         message = data.get('message', '').strip()
         to_email = data.get('to_email', '').strip()  # New field for custom recipient
         
-        # For media panel form, only email, phone, message are required
-        # For main contact form, name is also required
+        # Validate required fields
+        if not name or not email or not phone or not message:
+            return jsonify({'success': False, 'error': 'All fields are required'}), 400
+        
+        # Determine recipient based on form type
         if to_email:
-            # Media panel form - send to specified email
-            if not name or not email or not phone or not message:
-                return jsonify({'success': False, 'error': 'All fields are required'}), 400
+            # Media panel form
             recipient = to_email
             subject = f'Message from {name} via Media Panel'
         else:
             # Main contact form - send to church email
-            if not name or not email or not phone or not message:
-                return jsonify({'success': False, 'error': 'All fields are required'}), 400
             recipient = GMAIL_ADDRESS
             subject = f'New Contact Message from {name}'
         
@@ -351,22 +353,25 @@ Reply to: {email}
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
                 server.send_message(msg)
-            print(f'✓ Email sent successfully from {GMAIL_ADDRESS} to {recipient}')
+            print(f'✓ Email sent successfully to {recipient}')
+            return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+            
         except smtplib.SMTPAuthenticationError as auth_err:
-            print(f'✗ Gmail authentication failed: {str(auth_err)}')
-            print(f'  Check the Gmail password and ensure 2FA is disabled or an App Password is used.')
-            raise
+            error_msg = 'Gmail authentication failed. Check credentials and ensure 2FA is disabled or an App Password is used.'
+            print(f'✗ {error_msg}')
+            return jsonify({'success': False, 'error': error_msg}), 500
+            
         except smtplib.SMTPException as smtp_err:
-            print(f'✗ SMTP error: {str(smtp_err)}')
-            raise
-        
-        return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+            error_msg = f'Email service error: {str(smtp_err)}'
+            print(f'✗ {error_msg}')
+            return jsonify({'success': False, 'error': error_msg}), 500
     
     except Exception as e:
         import traceback
-        print(f'✗ Error sending email: {str(e)}')
+        error_msg = f'Error processing request: {str(e)}'
+        print(f'✗ {error_msg}')
         traceback.print_exc()
-        return jsonify({'success': False, 'error': 'Failed to send message. Please try again.'}), 500
+        return jsonify({'success': False, 'error': error_msg}), 500
 
 if __name__ == '__main__':
     # For local development
