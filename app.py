@@ -12,7 +12,6 @@ CORS(app)
 
 # Email configuration
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
-BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 FROM_EMAIL = os.getenv('FROM_EMAIL', 'noreply@thewordofgodchurch.com')
 TO_EMAIL = os.getenv('TO_EMAIL', 'churchthewordofgoddeliverance@gmail.com')
 
@@ -299,6 +298,11 @@ This message was sent from the church website contact form.
             'subject': subject
         }
 
+        def respond_with_saved_message(message):
+            if SAVE_CONTACTS_ON_FAILURE:
+                save_contact_message(contact_entry)
+            return jsonify({'success': True, 'message': message}), 200
+
         # Send email via configured provider
         try:
             if SENDGRID_API_KEY:
@@ -330,74 +334,27 @@ This message was sent from the church website contact form.
                     print(f"Email sent successfully to {recipient}", file=sys.stderr)
                     return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
                 else:
-                    if SAVE_CONTACTS_ON_FAILURE:
-                        save_contact_message(contact_entry)
                     if response.status_code in [401, 403]:
-                        error_msg = 'Email service authentication failed. Please contact the administrator.'
-                    else:
-                        error_msg = 'Email service error. Please try again later.'
+                        print(f'SendGrid Auth Error {response.status_code}: {response.text}', file=sys.stderr)
+                        return respond_with_saved_message('Email service authentication failed. Your message has been stored and will be reviewed by the administrator.')
                     print(f'SendGrid Error {response.status_code}: {response.text}', file=sys.stderr)
-                    return jsonify({'success': False, 'error': error_msg}), 500
-            elif BREVO_API_KEY:
-                print("Preparing Brevo request...", file=sys.stderr)
-                brevo_url = 'https://api.brevo.com/v3/smtp/email'
-                headers = {
-                    'api-key': BREVO_API_KEY,
-                    'Content-Type': 'application/json'
-                }
-                payload = {
-                    'sender': {'name': 'The Word of God Church', 'email': FROM_EMAIL},
-                    'to': [{'email': recipient}],
-                    'subject': subject,
-                    'textContent': plain_body,
-                    'htmlContent': html_body
-                }
-                if not to_email:
-                    payload['replyTo'] = {'email': email}
-                print(f"Sending to Brevo: {recipient}", file=sys.stderr)
-                response = requests.post(brevo_url, json=payload, headers=headers, timeout=10)
-                
-                if 200 <= response.status_code < 300:
-                    print(f"Email sent successfully to {recipient}", file=sys.stderr)
-                    return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
-                else:
-                    if SAVE_CONTACTS_ON_FAILURE:
-                        save_contact_message(contact_entry)
-                    if response.status_code in [401, 403]:
-                        error_msg = 'Email service authentication failed. Please contact the administrator.'
-                    else:
-                        error_msg = 'Email service error. Please try again later.'
-                    print(f'Brevo Error {response.status_code}: {response.text}', file=sys.stderr)
-                    return jsonify({'success': False, 'error': error_msg}), 500
+                    return respond_with_saved_message('Email service error. Your message has been stored and will be reviewed by the administrator.')
             else:
-                if SAVE_CONTACTS_ON_FAILURE:
-                    save_contact_message(contact_entry)
-                error_msg = 'Email service not configured. Your message has been stored and will be reviewed by the administrator.'
-                print('No email provider API key configured', file=sys.stderr)
-                return jsonify({'success': True, 'message': error_msg}), 200
+                return respond_with_saved_message('Email service not configured. Your message has been stored and will be reviewed by the administrator.')
         
         except requests.exceptions.Timeout:
-            if SAVE_CONTACTS_ON_FAILURE:
-                save_contact_message(contact_entry)
-            error_msg = 'Email service timeout. Please try again later.'
             print(f'Email provider timeout', file=sys.stderr)
-            return jsonify({'success': False, 'error': error_msg}), 500
+            return respond_with_saved_message('Email service timed out. Your message has been stored and will be reviewed by the administrator.')
         
         except requests.exceptions.RequestException as req_err:
-            if SAVE_CONTACTS_ON_FAILURE:
-                save_contact_message(contact_entry)
-            error_msg = 'Failed to send email. Please try again later.'
             print(f'Request Error: {str(req_err)}', file=sys.stderr)
-            return jsonify({'success': False, 'error': error_msg}), 500
+            return respond_with_saved_message('Failed to send email. Your message has been stored and will be reviewed by the administrator.')
             
         except Exception as e:
-            if SAVE_CONTACTS_ON_FAILURE:
-                save_contact_message(contact_entry)
             import traceback
-            error_msg = 'Failed to send email. Please try again later.'
             print(f'Unexpected error in email send: {str(e)}', file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
-            return jsonify({'success': False, 'error': error_msg}), 500
+            return respond_with_saved_message('Failed to send email. Your message has been stored and will be reviewed by the administrator.')
     
     except Exception as e:
         import traceback
