@@ -5,6 +5,9 @@ import os
 from flask_cors import CORS
 import requests
 import sys
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__, static_folder='')
 
@@ -14,6 +17,8 @@ CORS(app)
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
 FROM_EMAIL = os.getenv('FROM_EMAIL', 'noreply@thewordofgodchurch.com')
 TO_EMAIL = os.getenv('TO_EMAIL', 'churchthewordofgoddeliverance@gmail.com')
+GMAIL_ADDRESS = os.getenv('GMAIL_ADDRESS', '')
+GMAIL_PASSWORD = os.getenv('GMAIL_PASSWORD', '')
 
 LIVE_STATE_FILE = 'live_state.json'
 SIGNALING_FILE = 'signaling_data.json'
@@ -49,6 +54,44 @@ def load_signaling_data():
 def save_signaling_data(data):
     with open(SIGNALING_FILE, 'w') as f:
         json.dump(data, f)
+
+
+def send_email_via_gmail(to_email, subject, plain_body, html_body, from_name='The Word of God Church'):
+    """Send email using Gmail SMTP as fallback"""
+    try:
+        if not GMAIL_ADDRESS or not GMAIL_PASSWORD:
+            print("Gmail credentials not configured", file=sys.stderr)
+            return False
+        
+        print(f"Attempting Gmail SMTP send to {to_email}", file=sys.stderr)
+        
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = f"{from_name} <{GMAIL_ADDRESS}>"
+        msg['To'] = to_email
+        
+        part1 = MIMEText(plain_body, 'plain')
+        part2 = MIMEText(html_body, 'html')
+        
+        msg.attach(part1)
+        msg.attach(part2)
+        
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10) as server:
+            server.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, [to_email], msg.as_string())
+        
+        print(f"Gmail SMTP sent successfully to {to_email}", file=sys.stderr)
+        return True
+    
+    except smtplib.SMTPAuthenticationError:
+        print("Gmail authentication failed - check credentials", file=sys.stderr)
+        return False
+    except smtplib.SMTPException as e:
+        print(f"Gmail SMTP error: {str(e)}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"Gmail error: {str(e)}", file=sys.stderr)
+        return False
 
 
 def save_contact_message(entry):
@@ -334,21 +377,39 @@ This message was sent from the church website contact form.
                     print(f"Email sent successfully to {recipient}", file=sys.stderr)
                     return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
                 else:
-                    if response.status_code in [401, 403]:
-                        print(f'SendGrid Auth Error {response.status_code}: {response.text}', file=sys.stderr)
-                        return respond_with_saved_message('Email service authentication failed. Your message has been stored and will be reviewed by the administrator.')
-                    print(f'SendGrid Error {response.status_code}: {response.text}', file=sys.stderr)
-                    return respond_with_saved_message('Email service error. Your message has been stored and will be reviewed by the administrator.')
+                    # SendGrid failed, try Gmail SMTP fallback
+                    print(f'SendGrid Error {response.status_code}: Attempting Gmail fallback', file=sys.stderr)
+                    if send_email_via_gmail(recipient, subject, plain_body, html_body):
+                        print(f"Email sent successfully via Gmail to {recipient}", file=sys.stderr)
+                        return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+                    else:
+                        print(f'Both SendGrid and Gmail failed - saving to fallback', file=sys.stderr)
+                        return respond_with_saved_message('Email service unavailable. Your message has been stored and will be reviewed by the administrator.')
             else:
-                return respond_with_saved_message('Email service not configured. Your message has been stored and will be reviewed by the administrator.')
+                # No SendGrid API key, try Gmail SMTP
+                print("No SendGrid API key - attempting Gmail SMTP", file=sys.stderr)
+                if send_email_via_gmail(recipient, subject, plain_body, html_body):
+                    print(f"Email sent successfully via Gmail to {recipient}", file=sys.stderr)
+                    return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+                else:
+                    print(f'Gmail failed - saving to fallback', file=sys.stderr)
+                    return respond_with_saved_message('Email service not configured. Your message has been stored and will be reviewed by the administrator.')
         
         except requests.exceptions.Timeout:
-            print(f'Email provider timeout', file=sys.stderr)
-            return respond_with_saved_message('Email service timed out. Your message has been stored and will be reviewed by the administrator.')
+            print(f'SendGrid timeout - attempting Gmail fallback', file=sys.stderr)
+            if send_email_via_gmail(recipient, subject, plain_body, html_body):
+                print(f"Email sent successfully via Gmail to {recipient}", file=sys.stderr)
+                return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+            else:
+                return respond_with_saved_message('Email service timed out. Your message has been stored and will be reviewed by the administrator.')
         
         except requests.exceptions.RequestException as req_err:
-            print(f'Request Error: {str(req_err)}', file=sys.stderr)
-            return respond_with_saved_message('Failed to send email. Your message has been stored and will be reviewed by the administrator.')
+            print(f'SendGrid request error - attempting Gmail fallback: {str(req_err)}', file=sys.stderr)
+            if send_email_via_gmail(recipient, subject, plain_body, html_body):
+                print(f"Email sent successfully via Gmail to {recipient}", file=sys.stderr)
+                return jsonify({'success': True, 'message': 'Your message has been sent successfully!'})
+            else:
+                return respond_with_saved_message('Failed to send email. Your message has been stored and will be reviewed by the administrator.')
             
         except Exception as e:
             import traceback
